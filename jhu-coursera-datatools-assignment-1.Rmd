@@ -1,0 +1,159 @@
+---
+title: 'JHU Coursera Datatools Course Project'
+author: Autoz
+date: '`r format(Sys.Date())`'
+slug: jhu-coursera-datatools-course-project
+categories: [R]
+tags: [R, DataScience, R Markdown]
+output:
+  html_document:
+    toc: yes
+    keep_md: yes
+    number_sections: yes
+    theme: readable
+editor_options: 
+  chunk_output_type: console
+---
+
+> JHU DataScience Specialization/Cousers The Data Scientist’s Toolbox/Week??/Course Project
+
+# Datatools Course Project 数据科学工具
+
+由于这个非常入门的课程，共4Week每周一个小quiz，这个应该是最后的Project忘记了
+主要是熟练掌握一些R语言的数据处理工具例如 xlsx,XML等格式，以及readr这些有用的R包用法
+以下代码下载资源比较大暂不执行有兴趣的读者可以自己尝试
+
+```{r init,echo=F,warning=F,message=F}
+knitr::opts_chunk$set(cache =T, autodep =T)
+pacman::p_load(tidyverse,data.table,knitr,pander,rJava,xlsx,xlsxjars,XML,magrittr,microbenchmark)
+panderOptions("table.style","rmarkdown")
+```
+
+## 读取csv格式 2006年美国社区调查（ACS）
+
+The American Community Survey distributes downloadable data about United States communities. Download the 2006 microdata survey about housing for the state of Idaho using download.file() from here:
+
+- (pid, Population CSV file)
+- (hid, Household CSV file)
+
+[说明书 PUMS](https://www.nber.org/acs/PUMS/README)
+[说明书 DATA DICTIONARY - 2006 HOUSING](https://www.nber.org/acs/PUMS/2006/PUMSDataDict06.txt)
+[PDF](https://d396qusza40orc.cloudfront.net/getdata%2Fdata%2FPUMSDataDict06.pdf)
+
+```{r read PUMS,eval=FALSE}
+fileUrl <- "https://d396qusza40orc.cloudfront.net/getdata%2Fdata%2Fss06pid.csv"
+download.file(fileUrl,destfile = "Fss06pid.csv",method = "libcurl")
+fileUrl <- "https://d396qusza40orc.cloudfront.net/getdata%2Fdata%2Fss06hid.csv"
+download.file(fileUrl,destfile = "Fss06hid.csv",method = "libcurl")
+```
+
+
+### 读取几十上百m的数据算大文件，运算应该考虑花销
+
+```{r bechmark PUMS,echo=F,warning=F,message=F}
+# 对比HID数据速度，fread读取速度非常快
+A = print(microbenchmark(PID <- fread(file = "Fss06pid.csv",fill = T),
+               read_csv(file = "Fss06pid.csv"),
+               read.csv(file = "Fss06pid.csv"),
+               times = 1))
+
+B = print(microbenchmark(HID <- fread(file = "Fss06hid.csv",fill = T),
+               read_csv(file = "Fss06hid.csv"),
+               read.csv(file = "Fss06hid.csv"),
+               times = 1))
+
+PID <- as.tbl(PID)
+HID <- as.tbl(HID)
+C = print(microbenchmark(tapply(PID$pwgtp15, PID$SEX, mean),
+               sapply(split(PID$pwgtp15,PID$SEX),mean),
+               mean(PID[PID$SEX==1,]$pwgtp15),
+               mean(PID$pwgtp15,by=PID$SEX),
+               median(PID$pwgtp15,by=PID$SEX),
+               mean(PID[PID$SEX==1,]$SERIALNO),
+               median(PID[PID$SEX==1,]$SERIALNO)))
+```
+
+```{r show PUMS}
+pander(arrange(A,mean))
+pander(arrange(B,mean))
+```
+
+### 简单计算求和时间
+
+```{r show MEAN}
+pander(arrange(select(C,expr,mean),mean))
+```
+
+### Quiz 1
+
+How many housing units in this survey were worth more than $1,000,000?
+
+- 159
+- 164
+- **53**
+- 24
+
+## 读取xls,xlsx格式 美国国家天然气采购计划
+
+[说明书 Natural Gas Acquisition Program](https://catalog.data.gov/dataset/natural-gas-acquisition-program)
+
+
+```{r read NGAP,eval=F}
+fileUrl <- "https://d396qusza40orc.cloudfront.net/getdata%2Fdata%2FDATA.gov_NGAP.xlsx"
+download.file(fileurl,destfile = "gov_NGAP.xlsx",mode='wb')
+```
+
+```{r show NGAP}
+NGAP <- read.xlsx(file="gov_NGAP.xlsx",
+                  sheetIndex=1,
+                  colIndex=7:15,
+                  rowIndex = 18:23,
+                  header=T)
+NGAP <- as.tbl(NGAP)
+pander(head(NGAP))
+cat("Sum of Zipcode and")
+sum(NGAP$Zip*NGAP$Ext,na.rm=T)
+```
+
+### Quiz 3
+
+Read rows 18-23 and columns 7-15 into R and assign the result to a variable called:
+
+What is the value of:
+
+sum(dat\(Zip*dat\)Ext,na.rm=T)
+
+(original data source: http://catalog.data.gov/dataset/natural-gas-acquisition-program)
+
+1. **36534720**
+2. 338924
+3. 33544718
+4. 0
+
+## 读取xml格式 巴的摩尔餐厅数据
+
+[说明书 data.baltimorecity.gov](https://catalog.data.gov/dataset/restaurants-15baa)
+
+```{r read Frestaurants,eval=F}
+fileUrl <- "https://d396qusza40orc.cloudfront.net/getdata%2Fdata%2Frestaurants.xml"
+download.file(fileUrl,destfile = "Frestaurants.xml",mode='wb')
+```
+
+```{r show Frestaurants}
+system.time(DOC <- xmlTreeParse("Frestaurants.xml", useInternal = TRUE))
+rootNode <- xmlRoot(DOC)
+# 邮编是"21231" 的记录有多少条
+sum(xpathSApply(rootNode, "//zipcode", xmlValue) == "21231")
+```
+
+### Quiz 4
+
+How many restaurants have zipcode 21231?
+
+- **127**
+- 17
+- 28
+- 156
+
+
+<center>**THE END**</center>
